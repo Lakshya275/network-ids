@@ -1,25 +1,18 @@
-# sniffer.py
-
 import threading
 from scapy.all import sniff
 from packet_analyzer import extract_packet_info
+from detectors import analyze
 import config
 
 
 class PacketSniffer:
-    
-    def __init__(self, output_queue):
-        # Queue used to send packet data to the GUI
-        self.output_queue = output_queue
-
-        # Thread responsible for packet capturing
+    def __init__(self, packet_queue, alert_queue):
+        self.packet_queue = packet_queue
+        self.alert_queue = alert_queue
         self.thread = None
-
-        # Indicates whether packet sniffing is active
         self.running = False
 
     def _sniff_loop(self):
-       
         sniff(
             iface=config.INTERFACE,
             prn=self._handle_packet,
@@ -28,16 +21,21 @@ class PacketSniffer:
         )
 
     def _handle_packet(self, packet):
-        
         packet_info = extract_packet_info(packet)
 
-        if packet_info:
-            self.output_queue.put(packet_info)
+        if packet_info is None:
+            return
+
+        self.packet_queue.put(packet_info)
+
+        alerts = analyze(packet_info)
+
+        for alert in alerts:
+            self.alert_queue.put(alert)
 
     def start(self):
-       
         if self.running:
-            return  
+            return
 
         self.running = True
 
@@ -49,5 +47,4 @@ class PacketSniffer:
         self.thread.start()
 
     def stop(self):
-        
         self.running = False
